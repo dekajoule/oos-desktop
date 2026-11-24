@@ -87,9 +87,25 @@ impl eframe::App for App {
                     self.connect(&ctx);
                 }
                 ui.separator();
+                let live = self.session.is_some();
                 for (label, a) in [("Run", Action::Run), ("Stop", Action::Stop), ("Single", Action::Single)] {
-                    if ui.add_enabled(self.session.is_some(), egui::Button::new(label)).clicked() {
+                    if ui.add_enabled(live, egui::Button::new(label)).clicked() {
                         out.push(a);
+                    }
+                }
+                ui.separator();
+                // the system's save dialog is modal; the file is written by the session's worker (ADR 0005)
+                if ui.add_enabled(live, egui::Button::new("Screenshot…")).clicked() {
+                    let f = rfd::FileDialog::new().set_file_name("oos-screen.png").add_filter("PNG", &["png"]);
+                    if let Some(path) = f.save_file() {
+                        out.push(Action::SaveScreenshot(path));
+                    }
+                }
+                let chs = self.model.channels_on();
+                if ui.add_enabled(live && !chs.is_empty(), egui::Button::new("Save record…")).clicked() {
+                    let f = rfd::FileDialog::new().set_file_name("oos-record.csv").add_filter("CSV", &["csv"]);
+                    if let Some(path) = f.save_file() {
+                        out.push(Action::SaveRecords { chs, path });
                     }
                 }
                 ui.separator();
@@ -102,9 +118,14 @@ impl eframe::App for App {
             });
         });
         egui::Panel::bottom("status").show(ui, |ui| {
-            if let Some(p) = &self.model.problem {
-                ui.label(RichText::new(p).color(theme::PROBLEM));
-            }
+            ui.horizontal(|ui| {
+                if let Some(n) = &self.model.notice {
+                    ui.label(n);
+                }
+                if let Some(p) = &self.model.problem {
+                    ui.label(RichText::new(p).color(theme::PROBLEM));
+                }
+            });
         });
         egui::Panel::right("panels").min_size(260.0).show(ui, |ui| {
             ui.horizontal(|ui| {

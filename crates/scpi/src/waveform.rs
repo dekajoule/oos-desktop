@@ -61,7 +61,7 @@ impl Waveform {
     /// The codes of a block in the preamble's format (WORD is little-endian in OOS).
     pub fn codes_of(p: &Preamble, block: &[u8]) -> Vec<u16> {
         if p.width() == 2 {
-            block.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect()
+            block.as_chunks::<2>().0.iter().map(|&b| u16::from_le_bytes(b)).collect()
         } else {
             block.iter().map(|&b| b as u16).collect()
         }

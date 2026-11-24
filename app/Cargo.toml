@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 oos-session = { path = "../crates/session" }
 eframe = { version = "0.37", features = ["persistence"] }
+rfd = "0.18"
 
 [lints]
 workspace = true

@@ -224,8 +224,8 @@ frame. One worker per connection; a second scope is a second session.
 Built and tested (against `oos-ui --serve` where marked in section 7): the TCP link and the framing, resource strings,
 the table with the first settings of channels, time base and trigger, identity, error queue, run control, the screen
 record in pages, the session worker with merging and the poll plan, and the window with connect bar, panels and the
-waveform, the measurement panel.
+waveform, the measurement panel, the screenshot and the records saved as files.
 
 Planned, in this order: USBTMC through nusb and discovery (mDNS and USB) once OOS has its USBTMC function (OOS
-#235); cursors; screenshots and saving records; UI tests with egui_kittest; the CI job `sim` and the
+#235); cursors; UI tests with egui_kittest; the CI job `sim` and the
 release builds.

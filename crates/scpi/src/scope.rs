@@ -130,6 +130,17 @@ impl Scope {
         Ok(Waveform { source: ch, preamble: p, codes })
     }
 
+    /// The scope's screen as PNG (`:DISPlay:DATA? PNG`).
+    pub fn screenshot(&mut self) -> Result<Vec<u8>, ScpiError> {
+        // the size is not known before: a screen of 1024 x 600 in PNG is well under 2 MB
+        let png = self.block(":DISPlay:DATA? PNG", 2 << 20)?;
+        if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+            let got = format!("{} bytes that are not a PNG", png.len());
+            return Err(ScpiError::Unexpected { asked: ":DISPlay:DATA? PNG".into(), got });
+        }
+        Ok(png)
+    }
+
     /// A measurement of channel `ch`; None while the scope has no value for it (`9.9E37`).
     pub fn measure(&mut self, m: &Measure, ch: u8) -> Result<Option<f64>, ScpiError> {
         let q = format!(":MEASure:ITEM? {},CHAN{ch}", m.item);
@@ -231,6 +242,15 @@ mod tests {
         assert_eq!(s.get(r, 1).expect("get"), Value::Word("NORM"));
         let mut s = scope(Script::new("> :TRIGger:SWEep?\n< BANANA"));
         assert!(matches!(s.get(r, 1), Err(ScpiError::Unexpected { .. })));
+    }
+
+    #[test]
+    fn a_screenshot_is_a_png() {
+        let png = b"\x89PNG\r\n\x1a\nrest".to_vec();
+        let mut s = scope(Script::default().block(":DISPlay:DATA? PNG", png.clone()));
+        assert_eq!(s.screenshot().expect("png"), png);
+        let mut s = scope(Script::default().block(":DISPlay:DATA? PNG", b"BM...".to_vec()));
+        assert!(matches!(s.screenshot(), Err(ScpiError::Unexpected { .. })));
     }
 
     #[test]

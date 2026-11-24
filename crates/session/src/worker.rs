@@ -73,6 +73,22 @@ pub fn run(
                         Err((Some(key), ScpiError::Unexpected { asked: key.into(), got: "no such setting".into() }))
                     }
                 },
+                Action::SaveScreenshot(path) => match scope.screenshot() {
+                    Ok(png) => write(&emit, path, &png),
+                    Err(e) => Err((None, e)),
+                },
+                Action::SaveRecords { chs, path } => {
+                    match chs.iter().map(|&c| scope.waveform(c)).collect::<Result<Vec<_>, _>>() {
+                        Ok(waves) => match crate::files::csv(&waves) {
+                            Ok(text) => write(&emit, path, text.as_bytes()),
+                            Err(why) => {
+                                emit(Event::Problem { key: None, text: why });
+                                Ok(())
+                            }
+                        },
+                        Err(e) => Err((None, e)),
+                    }
+                }
                 Action::Run | Action::Stop | Action::Single => {
                     plan.settings_now();
                     match a {
@@ -104,6 +120,19 @@ pub fn run(
             }
         }
     }
+}
+
+/// Writes a file the user chose and says so; a failure is a problem of the session, not of the link.
+fn write(
+    emit: &impl Fn(Event) -> bool,
+    path: std::path::PathBuf,
+    bytes: &[u8],
+) -> Result<(), (Option<&'static str>, ScpiError)> {
+    match std::fs::write(&path, bytes) {
+        Ok(()) => emit(Event::Saved(path)),
+        Err(e) => emit(Event::Problem { key: None, text: format!("{}: {e}", path.display()) }),
+    };
+    Ok(())
 }
 
 /// Every row, for each channel of the model.

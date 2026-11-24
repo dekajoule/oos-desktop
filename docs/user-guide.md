@@ -10,6 +10,9 @@ shown on the scope under System > Network > Remote services), its IP address, or
 ## The window
 
 - **Run**, **Stop** and **Single** at the top do what the keys on the scope do.
+- **Screenshot…** saves the scope's screen as PNG; **Save record…** saves the records of the channels that are on as
+  one CSV file (time in seconds, then volts per channel). Both ask where; the bottom line says when the file is
+  written.
 - The waveform in the middle shows the record of each channel on the scope's screen.
 - The panels on the right (**Channels**, **Time base**, **Trigger**) show the scope's settings and change them. A dot
   beside a value means it was sent and the scope has not answered it yet; a value the scope refuses goes back to the
