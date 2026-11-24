@@ -5,7 +5,7 @@ use crate::model::Model;
 use crate::panels::{self, MEASURES_FIRST, PANELS};
 use crate::{plot, theme};
 use eframe::egui::{self, RichText};
-use oos_session::{measures, Action, Endpoint, Event, Handle, Watch};
+use oos_session::{measures, Action, Endpoint, Event, Found, Handle, Watch};
 use std::sync::mpsc::Receiver;
 
 pub struct App {
@@ -17,6 +17,9 @@ pub struct App {
     watched: Option<Watch>,
     /// The measurements chosen in the measurement panel (keys of `MEASURES`).
     measures: Vec<&'static str>,
+    /// A search for scopes under way, and the scopes the last one found.
+    finding: Option<Receiver<Result<Vec<Found>, String>>>,
+    found: Vec<Found>,
 }
 
 impl App {
@@ -28,7 +31,16 @@ impl App {
             Some(s) => s.split(',').filter_map(|k| measures::measure(k).map(|m| m.key)).collect(),
             None => MEASURES_FIRST.to_vec(),
         };
-        App { address, session: None, model: Model::default(), panel: PANELS[0].id, watched: None, measures }
+        App {
+            address,
+            session: None,
+            model: Model::default(),
+            panel: PANELS[0].id,
+            watched: None,
+            measures,
+            finding: None,
+            found: Vec::new(),
+        }
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
@@ -63,6 +75,17 @@ impl eframe::App for App {
                 self.model.apply(e);
             }
         }
+        if let Some(r) = self.finding.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.finding = None;
+            match r {
+                Ok(v) if v.is_empty() => self.model.notice = Some("no scope answered on this network".into()),
+                Ok(v) => {
+                    self.model.notice = Some(format!("{} found: choose under Found", v.len()));
+                    self.found = v;
+                }
+                Err(e) => self.model.problem = Some(format!("finding scopes: {e}")),
+            }
+        }
         if self.model.lost.is_some() {
             self.session = None;
         }
@@ -84,6 +107,27 @@ impl eframe::App for App {
                 let r = ui.add(egui::TextEdit::singleline(&mut self.address).hint_text("scope.local or 192.0.2.7"));
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 if ui.button("Connect").clicked() || enter {
+                    self.connect(&ctx);
+                }
+                let label = if self.finding.is_some() { "Finding…" } else { "Find" };
+                let find = ui.add_enabled(self.finding.is_none(), egui::Button::new(label));
+                if find.clicked() {
+                    let c = ctx.clone();
+                    self.finding = Some(oos_session::find(move || c.request_repaint()));
+                }
+                let mut pick = None;
+                if !self.found.is_empty() {
+                    ui.menu_button(format!("Found {} ▾", self.found.len()), |ui| {
+                        for f in &self.found {
+                            if ui.button(format!("{}  ·  {}", f.name, f.endpoint)).clicked() {
+                                pick = Some(f.endpoint.to_string());
+                                ui.close();
+                            }
+                        }
+                    });
+                }
+                if let Some(a) = pick {
+                    self.address = a;
                     self.connect(&ctx);
                 }
                 ui.separator();

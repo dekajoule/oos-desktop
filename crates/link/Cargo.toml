@@ -8,5 +8,9 @@ license.workspace = true
 repository = "https://github.com/dekajoule/oos-desktop"
 rust-version.workspace = true
 
+[dependencies]
+socket2 = { version = "0.6", features = ["all"] }
+if-addrs = "0.15"
+
 [lints]
 workspace = true

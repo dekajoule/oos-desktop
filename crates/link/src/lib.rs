@@ -3,12 +3,14 @@
 //! complete [`Message`]: a line, or an IEEE 488.2 definite-length block. It knows nothing of SCPI beyond that framing,
 //! and it does not retry.
 
+mod discover;
 mod endpoint;
 mod framing;
 mod script;
 mod tcp;
 
-pub use endpoint::Endpoint;
+pub use discover::{discover, Found};
+pub use endpoint::{Endpoint, SCPI_PORT};
 pub use framing::{Framer, MAX_BLOCK, MAX_LINE};
 pub use script::Script;
 pub use tcp::Tcp;
