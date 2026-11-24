@@ -67,6 +67,40 @@ impl Identity {
     }
 }
 
+/// What the trigger is doing (`:TRIGger:STATus?`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TriggerState {
+    /// Stopped, also after a completed Single.
+    Stop,
+    /// Triggered.
+    Triggered,
+    /// Drawing without a trigger (Auto sweep).
+    Auto,
+    /// Armed, waiting for a trigger.
+    Wait,
+}
+
+impl TriggerState {
+    fn parse(a: &str) -> Option<TriggerState> {
+        match a.trim().to_ascii_uppercase().as_str() {
+            "STOP" => Some(TriggerState::Stop),
+            "TD" => Some(TriggerState::Triggered),
+            "AUTO" => Some(TriggerState::Auto),
+            "WAIT" => Some(TriggerState::Wait),
+            _ => None,
+        }
+    }
+}
+
+/// The state of the acquisition: what the trigger does, the sample rate and the memory depth; the last two None
+/// when the scope answers something that is not a positive number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Acquisition {
+    pub trigger: TriggerState,
+    pub sample_rate: Option<f64>,
+    pub depth: Option<f64>,
+}
+
 pub struct Scope {
     link: Box<dyn Link>,
 }
@@ -108,6 +142,32 @@ impl Scope {
 
     pub fn single(&mut self) -> Result<(), ScpiError> {
         self.command(":SINGle")
+    }
+
+    /// `:AUToscale`: the scope sets channels, time base and trigger to the signals.
+    pub fn autoscale(&mut self) -> Result<(), ScpiError> {
+        self.command(":AUToscale")
+    }
+
+    /// `:CLEar`: persistence and measurement statistics.
+    pub fn clear(&mut self) -> Result<(), ScpiError> {
+        self.command(":CLEar")
+    }
+
+    /// `:TFORce`: one record without waiting for the trigger.
+    pub fn force(&mut self) -> Result<(), ScpiError> {
+        self.command(":TFORce")
+    }
+
+    /// The trigger's state, the sample rate and the memory depth.
+    pub fn acquisition(&mut self) -> Result<Acquisition, ScpiError> {
+        let a = self.query(":TRIGger:STATus?")?;
+        let trigger =
+            TriggerState::parse(&a).ok_or(ScpiError::Unexpected { asked: ":TRIGger:STATus?".into(), got: a })?;
+        let positive = |a: String| a.trim().parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
+        let sample_rate = positive(self.query(":ACQuire:SRATe?")?);
+        let depth = positive(self.query(":ACQuire:MDEPth?")?);
+        Ok(Acquisition { trigger, sample_rate, depth })
     }
 
     /// The screen record of channel `ch` (`:WAVeform:MODE NORMal`, BYTE), read in pages of [`PAGE`] points.
@@ -242,6 +302,21 @@ mod tests {
         assert_eq!(s.get(r, 1).expect("get"), Value::Word("NORM"));
         let mut s = scope(Script::new("> :TRIGger:SWEep?\n< BANANA"));
         assert!(matches!(s.get(r, 1), Err(ScpiError::Unexpected { .. })));
+    }
+
+    #[test]
+    fn the_acquisition_state_and_answers_that_do_not_fit() {
+        let mut s = scope(Script::new(
+            "> :TRIGger:STATus?\n< TD\n> :ACQuire:SRATe?\n< 1.250000E+09\n> :ACQuire:MDEPth?\n< 1000000",
+        ));
+        let a = s.acquisition().expect("state");
+        assert_eq!(a, Acquisition { trigger: TriggerState::Triggered, sample_rate: Some(1.25e9), depth: Some(1e6) });
+        let mut s =
+            scope(Script::new("> :TRIGger:STATus?\n< wait\n> :ACQuire:SRATe?\n< nan\n> :ACQuire:MDEPth?\n< -1"));
+        let a = s.acquisition().expect("state");
+        assert_eq!((a.trigger, a.sample_rate, a.depth), (TriggerState::Wait, None, None));
+        let mut s = scope(Script::new("> :TRIGger:STATus?\n< RUNNING"));
+        assert!(matches!(s.acquisition(), Err(ScpiError::Unexpected { .. })));
     }
 
     #[test]

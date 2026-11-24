@@ -89,12 +89,15 @@ pub fn run(
                         Err(e) => Err((None, e)),
                     }
                 }
-                Action::Run | Action::Stop | Action::Single => {
+                Action::Run | Action::Stop | Action::Single | Action::Autoscale | Action::Clear | Action::Force => {
                     plan.settings_now();
                     match a {
                         Action::Run => scope.run(),
                         Action::Stop => scope.stop(),
-                        _ => scope.single(),
+                        Action::Single => scope.single(),
+                        Action::Autoscale => scope.autoscale(),
+                        Action::Clear => scope.clear(),
+                        _ => scope.force(),
                     }
                     .map_err(|e| (None, e))
                 }
@@ -109,6 +112,9 @@ pub fn run(
         let r = match plan.next(Instant::now()) {
             None => continue,
             Some(Job::Settings) => read_settings(&mut scope, channels, &emit),
+            Some(Job::Acquisition) => scope.acquisition().map(|a| {
+                emit(Event::Acquisition(a));
+            }),
             Some(Job::Measures) => read_measures(&mut scope, &plan.watch.measures, &emit),
             Some(Job::Waveform(ch)) => scope.waveform(ch).map(|w| {
                 emit(Event::Waveform(w));
