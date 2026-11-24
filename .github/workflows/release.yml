@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Builds the program for Windows, macOS (one universal binary for Apple silicon and Intel) and Linux. A tag v* makes a
-# GitHub release with the three archives and their SHA-256 sums; started by hand, or by a pull request that changes
+# GitHub release with the three archives and their SHA-256 sums (a pre-release for 0.x); started by hand, or by a pull request that changes
 # this file, it only keeps them as artifacts of the run, to try the build.
 name: release
 on:
@@ -84,5 +84,7 @@ jobs:
           set -eu
           cd dist
           sha256sum * > SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "oos-desktop ${GITHUB_REF_NAME#v}" \
+          pre=""
+          case "$GITHUB_REF_NAME" in v0.*) pre="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "oos-desktop ${GITHUB_REF_NAME#v}" $pre \
             --notes "Downloads for Windows, macOS (Apple silicon and Intel) and Linux; how to install them: the wiki's Installation page. Changes: CHANGELOG.md." *
