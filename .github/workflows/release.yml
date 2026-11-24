@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Builds the program for Windows, macOS (one universal binary for Apple silicon and Intel) and Linux. A tag v* makes a
+# GitHub release with the three archives and their SHA-256 sums; started by hand it only keeps them as artifacts of
+# the run, to try the build.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x86_64
+          - os: macos-latest
+            name: macos-universal
+          - os: ubuntu-22.04
+            name: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Build
+        shell: bash
+        run: |
+          set -eu
+          v="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || v="dev-${GITHUB_SHA::8}"
+          d="oos-desktop-$v-${{ matrix.name }}"
+          mkdir -p "dist/$d"
+          case "${{ matrix.os }}" in
+          macos-*)
+            cargo build --release --locked -p oos-desktop --target aarch64-apple-darwin
+            cargo build --release --locked -p oos-desktop --target x86_64-apple-darwin
+            lipo -create -output "dist/$d/oos-desktop" \
+              target/aarch64-apple-darwin/release/oos-desktop target/x86_64-apple-darwin/release/oos-desktop
+            ;;
+          windows-*)
+            cargo build --release --locked -p oos-desktop
+            cp target/release/oos-desktop.exe "dist/$d/"
+            ;;
+          *)
+            cargo build --release --locked -p oos-desktop
+            cp target/release/oos-desktop "dist/$d/"
+            ;;
+          esac
+          cp LICENSE README.md "dist/$d/"
+          cd dist
+          if [ "${{ matrix.os }}" = windows-latest ]; then
+            7z a -tzip -bso0 "$d.zip" "$d"
+          else
+            tar -czf "$d.tar.gz" "$d"
+          fi
+          rm -rf "$d"
+          ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          cd dist
+          sha256sum * > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "oos-desktop ${GITHUB_REF_NAME#v}" \
+            --notes "Downloads for Windows, macOS (Apple silicon and Intel) and Linux; how to install them: the wiki's Installation page. Changes: CHANGELOG.md." *
