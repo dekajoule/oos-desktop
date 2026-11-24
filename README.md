@@ -12,7 +12,8 @@ and Linux; USB from Windows and Linux is not yet tried with it. What is built an
 ## Use
 
 **The [wiki](https://github.com/dekajoule/oos-desktop/wiki)** is the user guide: installing, connecting, the window,
-troubleshooting. In short:
+troubleshooting. Ready-made downloads for Windows, macOS and Linux are in the
+[releases](https://github.com/dekajoule/oos-desktop/releases). From the source:
 
 ```sh
 cargo run --release -p oos-desktop

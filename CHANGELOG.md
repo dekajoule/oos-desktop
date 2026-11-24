@@ -2,7 +2,9 @@
 
 What a user notices, newest first.
 
-## Unreleased
+## 0.1.0 (2026-11-24)
+
+The first release.
 
 - A new look: a top bar with Run/Stop in the scope's colours, the trigger's state and the tools; a strip of channel,
   time base, acquisition and trigger cards (click switches a channel, the wheel turns its knob); the measurements below
