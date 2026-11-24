@@ -11,6 +11,9 @@ use std::time::{Duration, Instant};
 const LINE_WAIT: Duration = Duration::from_secs(2);
 /// Points read per `:WAVeform:DATA?` page.
 pub const PAGE: u64 = 1_000_000;
+/// Queries sent in one message at most (OOS docs/scpi.md: absolute headers, separated by semicolons; the answers come
+/// in one line, separated the same way).
+const CHAIN: usize = 12;
 /// Error queue entries read after a set at most (a scope that keeps answering is not waited for forever).
 const MAX_ERRORS: usize = 16;
 
@@ -120,11 +123,19 @@ impl Scope {
         Ok(Identity { maker: f[0].into(), model: f[1].into(), serial: f[2].into(), version })
     }
 
-    /// The value of a setting (`ch`: 1-based, ignored by rows without a channel).
-    pub fn get(&mut self, row: &Row, ch: u8) -> Result<Value, ScpiError> {
-        let q = format!("{}?", row.header_for(ch));
-        let a = self.query(&q)?;
-        Value::parse(&row.kind, &a).ok_or(ScpiError::Unexpected { asked: q, got: a })
+    /// The values of several settings, read with as few round trips as the scope allows: a link's round trip, not
+    /// the scope's answer, is what a poll of many settings waits for.
+    pub fn get_many(&mut self, which: &[(&Row, u8)]) -> Result<Vec<Value>, ScpiError> {
+        let mut out = Vec::with_capacity(which.len());
+        for chunk in which.chunks(CHAIN) {
+            let qs: Vec<String> = chunk.iter().map(|(r, ch)| format!("{}?", r.header_for(*ch))).collect();
+            let answers = self.query_chain(&qs)?;
+            for ((r, _), (q, a)) in chunk.iter().zip(qs.iter().zip(answers)) {
+                let v = Value::parse(&r.kind, &a);
+                out.push(v.ok_or(ScpiError::Unexpected { asked: q.clone(), got: a })?);
+            }
+        }
+        Ok(out)
     }
 
     /// Sets a setting and reads the error queue, so a refused value is an error of this call.
@@ -161,21 +172,19 @@ impl Scope {
 
     /// The trigger's state, the sample rate and the memory depth.
     pub fn acquisition(&mut self) -> Result<Acquisition, ScpiError> {
-        let a = self.query(":TRIGger:STATus?")?;
+        let qs = [":TRIGger:STATus?", ":ACQuire:SRATe?", ":ACQuire:MDEPth?"].map(String::from);
+        let a = self.query_chain(&qs)?;
         let trigger =
-            TriggerState::parse(&a).ok_or(ScpiError::Unexpected { asked: ":TRIGger:STATus?".into(), got: a })?;
-        let positive = |a: String| a.trim().parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
-        let sample_rate = positive(self.query(":ACQuire:SRATe?")?);
-        let depth = positive(self.query(":ACQuire:MDEPth?")?);
-        Ok(Acquisition { trigger, sample_rate, depth })
+            TriggerState::parse(&a[0]).ok_or(ScpiError::Unexpected { asked: qs[0].clone(), got: a[0].clone() })?;
+        let positive = |a: &str| a.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
+        Ok(Acquisition { trigger, sample_rate: positive(&a[1]), depth: positive(&a[2]) })
     }
 
     /// The screen record of channel `ch` (`:WAVeform:MODE NORMal`, BYTE), read in pages of [`PAGE`] points.
     pub fn waveform(&mut self, ch: u8) -> Result<Waveform, ScpiError> {
-        self.command(&format!(":WAVeform:SOURce CHANnel{ch}"))?;
-        self.command(":WAVeform:MODE NORMal")?;
-        self.command(":WAVeform:FORMat BYTE")?;
-        self.command(":WAVeform:STARt 1")?;
+        self.command(&format!(
+            ":WAVeform:SOURce CHANnel{ch};:WAVeform:MODE NORMal;:WAVeform:FORMat BYTE;:WAVeform:STARt 1"
+        ))?;
         let pre = self.query(":WAVeform:PREamble?")?;
         let p = Preamble::parse(&pre).ok_or(ScpiError::Unexpected { asked: ":WAVeform:PREamble?".into(), got: pre })?;
         let mut codes = Vec::with_capacity(p.points.min(PAGE * 4) as usize);
@@ -201,12 +210,17 @@ impl Scope {
         Ok(png)
     }
 
-    /// A measurement of channel `ch`; None while the scope has no value for it (`9.9E37`).
-    pub fn measure(&mut self, m: &Measure, ch: u8) -> Result<Option<f64>, ScpiError> {
-        let q = format!(":MEASure:ITEM? {},CHAN{ch}", m.item);
-        let a = self.query(&q)?;
-        let x: f64 = a.trim().parse().map_err(|_| ScpiError::Unexpected { asked: q, got: a.clone() })?;
-        Ok((x.is_finite() && x.abs() < NO_VALUE * 0.5).then_some(x))
+    /// Measurements of channels in as few round trips as the scope allows; None while the scope has no value for one
+    /// (`9.9E37`).
+    pub fn measure_many(&mut self, which: &[(&Measure, u8)]) -> Result<Vec<Option<f64>>, ScpiError> {
+        let mut out = Vec::with_capacity(which.len());
+        for chunk in which.chunks(CHAIN) {
+            let qs: Vec<String> = chunk.iter().map(|(m, ch)| format!(":MEASure:ITEM? {},CHAN{ch}", m.item)).collect();
+            for (q, a) in qs.iter().zip(self.query_chain(&qs)?) {
+                out.push(no_value(q, &a)?);
+            }
+        }
+        Ok(out)
     }
 
     /// The error queue until it is empty (`0,"No error"`), at most [`MAX_ERRORS`] entries.
@@ -238,6 +252,16 @@ impl Scope {
         }
     }
 
+    /// Queries sent as one message; their answers, one per query.
+    fn query_chain(&mut self, qs: &[String]) -> Result<Vec<String>, ScpiError> {
+        let line = self.query(&qs.join(";"))?;
+        let parts: Vec<String> = line.split(';').map(|p| p.trim().to_string()).collect();
+        if parts.len() != qs.len() {
+            return Err(ScpiError::Unexpected { asked: qs.join(";"), got: line });
+        }
+        Ok(parts)
+    }
+
     fn query(&mut self, q: &str) -> Result<String, ScpiError> {
         self.link.send(q)?;
         match self.link.recv(Instant::now() + LINE_WAIT)? {
@@ -255,6 +279,12 @@ impl Scope {
             Message::Line(s) => Err(ScpiError::Unexpected { asked: q.into(), got: s }),
         }
     }
+}
+
+/// A measurement's answer: None for the scope's `9.9E37` (no value on this record).
+fn no_value(q: &str, a: &str) -> Result<Option<f64>, ScpiError> {
+    let x: f64 = a.trim().parse().map_err(|_| ScpiError::Unexpected { asked: q.into(), got: a.into() })?;
+    Ok((x.is_finite() && x.abs() < NO_VALUE * 0.5).then_some(x))
 }
 
 #[cfg(test)]
@@ -299,24 +329,43 @@ mod tests {
     fn a_query_answer_that_does_not_fit_is_an_error() {
         let r = row("trig.sweep").expect("row");
         let mut s = scope(Script::new("> :TRIGger:SWEep?\n< NORM"));
-        assert_eq!(s.get(r, 1).expect("get"), Value::Word("NORM"));
+        assert_eq!(s.get_many(&[(r, 1)]).expect("get"), vec![Value::Word("NORM")]);
         let mut s = scope(Script::new("> :TRIGger:SWEep?\n< BANANA"));
-        assert!(matches!(s.get(r, 1), Err(ScpiError::Unexpected { .. })));
+        assert!(matches!(s.get_many(&[(r, 1)]), Err(ScpiError::Unexpected { .. })));
     }
 
     #[test]
     fn the_acquisition_state_and_answers_that_do_not_fit() {
-        let mut s = scope(Script::new(
-            "> :TRIGger:STATus?\n< TD\n> :ACQuire:SRATe?\n< 1.250000E+09\n> :ACQuire:MDEPth?\n< 1000000",
-        ));
+        let mut s =
+            scope(Script::new("> :TRIGger:STATus?;:ACQuire:SRATe?;:ACQuire:MDEPth?\n< TD;1.250000E+09;1000000"));
         let a = s.acquisition().expect("state");
         assert_eq!(a, Acquisition { trigger: TriggerState::Triggered, sample_rate: Some(1.25e9), depth: Some(1e6) });
-        let mut s =
-            scope(Script::new("> :TRIGger:STATus?\n< wait\n> :ACQuire:SRATe?\n< nan\n> :ACQuire:MDEPth?\n< -1"));
+        let mut s = scope(Script::new("> :TRIGger:STATus?;:ACQuire:SRATe?;:ACQuire:MDEPth?\n< wait;nan;-1"));
         let a = s.acquisition().expect("state");
         assert_eq!((a.trigger, a.sample_rate, a.depth), (TriggerState::Wait, None, None));
-        let mut s = scope(Script::new("> :TRIGger:STATus?\n< RUNNING"));
+        let mut s = scope(Script::new("> :TRIGger:STATus?;:ACQuire:SRATe?;:ACQuire:MDEPth?\n< RUNNING;1;1"));
         assert!(matches!(s.acquisition(), Err(ScpiError::Unexpected { .. })));
+        let mut s = scope(Script::new("> :TRIGger:STATus?;:ACQuire:SRATe?;:ACQuire:MDEPth?\n< TD;1"));
+        assert!(matches!(s.acquisition(), Err(ScpiError::Unexpected { .. })), "an answer missing");
+    }
+
+    #[test]
+    fn settings_and_measurements_are_read_chained() {
+        let (scale, sweep) = (row("chan.scale").expect("row"), row("trig.sweep").expect("row"));
+        let mut s = scope(Script::new("> :CHANnel2:SCALe?;:TRIGger:SWEep?\n< 5.000000E-01;NORM"));
+        let got = s.get_many(&[(scale, 2), (sweep, 1)]).expect("values");
+        assert_eq!(got, vec![Value::Float(0.5), Value::Word("NORM")]);
+        let mut s = scope(Script::new("> :CHANnel2:SCALe?;:TRIGger:SWEep?\n< 5.000000E-01;BANANA"));
+        assert!(matches!(s.get_many(&[(scale, 2), (sweep, 1)]), Err(ScpiError::Unexpected { .. })));
+        // more than a chain's worth go in two messages
+        let many: Vec<_> = (0..CHAIN + 1).map(|_| (scale, 1)).collect();
+        let first = [":CHANnel1:SCALe?"; CHAIN].join(";");
+        let answers = ["1"; CHAIN].join(";");
+        let mut s = scope(Script::new(&format!("> {first}\n< {answers}\n> :CHANnel1:SCALe?\n< 2")));
+        assert_eq!(s.get_many(&many).expect("values").len(), CHAIN + 1);
+        let (vpp, freq) = (crate::measures::measure("vpp").expect("vpp"), crate::measures::measure("freq").expect("f"));
+        let mut s = scope(Script::new("> :MEASure:ITEM? VPP,CHAN1;:MEASure:ITEM? FREQUENCY,CHAN1\n< 2.5;9.9E37"));
+        assert_eq!(s.measure_many(&[(vpp, 1), (freq, 1)]).expect("values"), vec![Some(2.5), None]);
     }
 
     #[test]
@@ -335,17 +384,16 @@ mod tests {
             "> :MEASure:ITEM? FREQUENCY,CHAN2\n< 1.000000E+03\n> :MEASure:ITEM? FREQUENCY,CHAN2\n< 9.9E37\n\
              > :MEASure:ITEM? FREQUENCY,CHAN2\n< what",
         ));
-        assert_eq!(s.measure(freq, 2).expect("value"), Some(1000.0));
-        assert_eq!(s.measure(freq, 2).expect("none"), None);
-        assert!(matches!(s.measure(freq, 2), Err(ScpiError::Unexpected { .. })));
+        assert_eq!(s.measure_many(&[(freq, 2)]).expect("value"), vec![Some(1000.0)]);
+        assert_eq!(s.measure_many(&[(freq, 2)]).expect("none"), vec![None]);
+        assert!(matches!(s.measure_many(&[(freq, 2)]), Err(ScpiError::Unexpected { .. })));
     }
 
     #[test]
     fn a_record_is_read_in_pages() {
         let pts = PAGE + 2;
         let setup = format!(
-            "> :WAVeform:SOURce CHANnel1\n{NO_ERROR}\n> :WAVeform:MODE NORMal\n{NO_ERROR}\n\
-             > :WAVeform:FORMat BYTE\n{NO_ERROR}\n> :WAVeform:STARt 1\n{NO_ERROR}\n\
+            "> :WAVeform:SOURce CHANnel1;:WAVeform:MODE NORMal;:WAVeform:FORMat BYTE;:WAVeform:STARt 1\n{NO_ERROR}\n\
              > :WAVeform:PREamble?\n< 0,0,{pts},1,1e-9,0,0,0.01,0,128\n\
              > :WAVeform:STARt 1;:WAVeform:STOP {PAGE}"
         );
