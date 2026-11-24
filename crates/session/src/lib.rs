@@ -3,6 +3,7 @@
 //! owns the link; the UI sends [`Action`]s and takes [`Event`]s. The types the UI needs of the layers below are
 //! re-exported here, so that `app` uses no crate below this one (ADR 0003).
 
+mod files;
 mod merge;
 mod plan;
 mod worker;
@@ -29,6 +30,13 @@ pub enum Action {
     Single,
     /// What the visible panels need read regularly.
     Watch(Watch),
+    /// The scope's screen as PNG into `path` (a file the user chose).
+    SaveScreenshot(std::path::PathBuf),
+    /// The records of channels `chs` read again and written as CSV into `path`.
+    SaveRecords {
+        chs: Vec<u8>,
+        path: std::path::PathBuf,
+    },
     Close,
 }
 
@@ -49,6 +57,8 @@ pub enum Event {
         ch: u8,
         value: Option<f64>,
     },
+    /// A file was written.
+    Saved(std::path::PathBuf),
     /// The scope refused an action, or answered something that does not fit; the session goes on.
     Problem {
         key: Option<&'static str>,

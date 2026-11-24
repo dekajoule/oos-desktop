@@ -14,6 +14,8 @@ pub struct Model {
     pub waves: BTreeMap<u8, Waveform>,
     measured: HashMap<(&'static str, u8), Option<f64>>,
     pub problem: Option<String>,
+    /// The last thing done that the user should see (a file written).
+    pub notice: Option<String>,
     pub lost: Option<String>,
 }
 
@@ -40,6 +42,9 @@ impl Model {
                     self.pending.retain(|(pk, _), _| *pk != k);
                 }
                 self.problem = Some(text);
+            }
+            Event::Saved(path) => {
+                self.notice = Some(format!("saved {}", path.display()));
             }
             Event::Lost(why) => {
                 self.lost = Some(why);

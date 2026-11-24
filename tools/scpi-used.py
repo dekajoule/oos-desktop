@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TOKEN = re.compile(r"`([:*][A-Za-z][^`\s|]*)`")
+TOKEN = re.compile(r"`([:*][A-Za-z][^`\s|]*)[^`]*`")
 
 
 def variants(h):
@@ -24,11 +24,23 @@ def variants(h):
     return {re.sub(r"<n>", "{n}", o).upper() for o in out}
 
 
+def first_cell(line):
+    """The first cell of a table row; a `|` inside backticks (`[BMP|PNG]`) does not end it."""
+    out, code = [], False
+    for c in line[1:]:
+        if c == "`":
+            code = not code
+        elif c == "|" and not code:
+            break
+        out.append(c)
+    return "".join(out)
+
+
 def documented(text):
     known = set()
     for line in text.splitlines():
         # a table names a command in its first cell; prose names some too (`:SYSTem:ERRor?`)
-        cell = line.split("|")[1] if line.startswith("|") else line
+        cell = first_cell(line) if line.startswith("|") else line
         prev = None
         for t in TOKEN.findall(cell):
             # `:WAVeform:STARt[?]` / `:STOP[?]`: a second token in a cell is relative to the first one's parent

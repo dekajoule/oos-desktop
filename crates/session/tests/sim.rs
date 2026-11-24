@@ -43,6 +43,24 @@ fn a_session_against_the_simulator() {
     let w = wave.expect("a record of CH1");
     assert!(vpp.is_some_and(|v| v > 0.0), "no peak-peak value of CH1: {vpp:?}");
     assert!(w.codes.len() as u64 == w.preamble.points && !w.codes.is_empty(), "{:?}", w.preamble);
+    // a screenshot and the record are written where the user chose
+    let dir = std::env::temp_dir().join(format!("oos-desktop-sim-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let (png, csv) = (dir.join("s.png"), dir.join("r.csv"));
+    h.send(Action::SaveScreenshot(png.clone()));
+    h.send(Action::SaveRecords { chs: vec![1], path: csv.clone() });
+    let mut saved = Vec::new();
+    while saved.len() < 2 {
+        match next("files saved") {
+            Event::Saved(p) => saved.push(p),
+            Event::Problem { text, .. } => panic!("{text}"),
+            _ => {}
+        }
+    }
+    assert!(std::fs::read(&png).expect("png").starts_with(b"\x89PNG"));
+    let text = std::fs::read_to_string(&csv).expect("csv");
+    assert!(text.starts_with("time_s,ch1_V\n") && text.lines().count() > 100, "{}", &text[..text.len().min(200)]);
+    let _ = std::fs::remove_dir_all(&dir);
     // a set comes back as the scope's answer
     h.send(Action::Set { key: "chan.scale", ch: 1, value: Value::Float(0.5) });
     let end = Instant::now() + Duration::from_secs(10);
