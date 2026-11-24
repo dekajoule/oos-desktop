@@ -11,3 +11,4 @@ from [template.md](template.md).
 | [0004](0004-one-table-of-settings.md) | One table of settings | proposed |
 | [0005](0005-the-ui-thread-never-waits-for-the-scope.md) | The UI thread never waits for the scope | proposed |
 | [0006](0006-rust-and-egui.md) | Rust and egui, one binary per system | proposed |
+| [0007](0007-the-user-guide-is-the-wiki-kept-in-the-tree.md) | The user guide is the wiki, kept in the tree | proposed |
