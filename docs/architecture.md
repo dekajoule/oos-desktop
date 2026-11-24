@@ -226,7 +226,7 @@ frame. One worker per connection; a second scope is a second session.
 | show one more measurement | a row in `crates/scpi/src/measures.rs` | nothing else |
 | read or set one more setting | a row in `crates/scpi/src/commands.rs` | its key in a panel's list (`app/src/panels.rs`), the header in OOS's docs/scpi.md at `OOS_REV` |
 | a new query that is not a setting | a method of `Scope` (`crates/scpi/src/scope.rs`) with an exchange test | a `Kind` in `session` if it is polled, an `Event` for its result |
-| a new side panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | its fetch kinds, `docs/user-guide.md` |
+| a new side panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | its fetch kinds, `wiki/The-Window.md` |
 | a new transport | a module in `crates/link/src/` implementing `Link`, its `Endpoint` variant and resource string | `discover()`, an exchange test |
 | how often something is read | `crates/session/src/plan.rs` | its test |
 | the look | `app/src/theme.rs` | the screenshots in `docs/` |
@@ -241,7 +241,8 @@ with merging and the poll plan, and the window with top bar, panels, the scaled 
 strip of cards, the measurements below the waveform, the screenshot and the records saved as files, finding scopes on
 the network.
 
-USBTMC is built and its protocol tested on the host; it has not run against a scope yet (OOS's USBTMC function is
-not merged).
+Against a scope (DHO924S with OOS main, 2026-11-24): the contract test `crates/session/tests/sim.rs` passed over TCP
+and over USBTMC from a Mac, and Find listed the scope on the network and on USB. USB from Windows and Linux is not yet
+tried with this program. The user guide is the wiki (`wiki/`, ADR 0007).
 
-Planned: UI tests with egui_kittest; the CI job `sim` and the release builds.
+Planned: UI tests with egui_kittest; the release builds.

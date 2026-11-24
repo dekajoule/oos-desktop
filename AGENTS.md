@@ -41,7 +41,7 @@ the ADR holds.
 - Reuse before you add: look for code that already does the job and call it. Remove what your change leaves unused in
   the same pull request.
 - Docs change in the same pull request as the code they describe: `docs/architecture.md` when a part, a thread or a
-  direction changes; `docs/user-guide.md` when a user sees it; a new ADR (status `proposed`) for a decision others
+  direction changes; its page in `wiki/` when a user sees it (ADR 0007, never on the wiki itself); a new ADR (status `proposed`) for a decision others
   build on; a change of direction supersedes a record, it does not edit it.
 - State how a fact about the scope is known: **tested against `oos-ui --serve`**, **tested on a scope**, or **not yet
   tested on a scope**. Reports of your own work say what ran where.
@@ -53,7 +53,7 @@ the ADR holds.
 | setting | a row in `crates/scpi/src/commands.rs` | its key in a panel's list, an exchange test if its answer is unusual | `crates/scpi/src/commands.rs::every_row_is_complete`, `tools/scpi-used.py` |
 | measurement | a row in `crates/scpi/src/measures.rs` | nothing else: the measurement panel offers every row | `crates/scpi/src/measures.rs::every_measure_is_complete` |
 | query | a method of `Scope` in `crates/scpi/src/scope.rs` | an exchange test, a `Kind` and an `Event` in `session` if it is polled | `tools/scpi-used.py` |
-| panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | `docs/user-guide.md` | `app/src/panels.rs::every_panel_is_complete` |
+| panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | `wiki/The-Window.md` | `app/src/panels.rs::every_panel_is_complete` |
 | transport | a module in `crates/link/src/` implementing `Link`, an `Endpoint` variant | `discover()`, its resource string, an exchange test | `crates/link/src/endpoint.rs::every_endpoint_round_trips` |
 | dependency | `Cargo.toml` of the crate | its line in `tools/deps-allowed.txt` with the reason | `tools/check.sh deps` |
 
