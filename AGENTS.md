@@ -51,6 +51,7 @@ the ADR holds.
 | Kind | Declare it in | Also touch | The check that fails when a part is missing |
 |---|---|---|---|
 | setting | a row in `crates/scpi/src/commands.rs` | its key in a panel's list, an exchange test if its answer is unusual | `crates/scpi/src/commands.rs::every_row_is_complete`, `tools/scpi-used.py` |
+| measurement | a row in `crates/scpi/src/measures.rs` | nothing else: the measurement panel offers every row | `crates/scpi/src/measures.rs::every_measure_is_complete` |
 | query | a method of `Scope` in `crates/scpi/src/scope.rs` | an exchange test, a `Kind` and an `Event` in `session` if it is polled | `tools/scpi-used.py` |
 | panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | `docs/user-guide.md` | `app/src/panels.rs::every_panel_is_complete` |
 | transport | a module in `crates/link/src/` implementing `Link`, an `Endpoint` variant | `discover()`, its resource string, an exchange test | `crates/link/src/endpoint.rs::every_endpoint_round_trips` |

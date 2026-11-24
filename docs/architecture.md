@@ -110,9 +110,10 @@ upwards, and `app` does not use `scpi` or `link` directly; it sees their types o
   `Enum(&[..])`, `Bool`, `Int`), and the channels it repeats for. A row gives both the set and the query. The panels
   draw their controls from rows, so a new setting is a new row and, when it belongs to a panel, its key in that panel's
   list.
+- `measures.rs`: the measurements the program shows, one row each (key, the item of `:MEASure:ITEM?`, label, unit).
 - `Scope<L: Link>`: the typed queries that are more than a setting: `identity()` (`*IDN?`, the OOS version),
   `waveform(source, mode)` (`:WAVeform:SOURce`, `:MODE`, `:FORMat`, `:PREamble?`, `:DATA?` in pages),
-  `screenshot()` (`:DISPlay:DATA? PNG`), `measure(item, source)`, `errors()` (`:SYSTem:ERRor?` until empty).
+  `screenshot()` (`:DISPlay:DATA? PNG`), `measure(row, channel)` (None for the scope's `9.9E37`), `errors()` (`:SYSTem:ERRor?` until empty).
 - `Waveform { preamble, samples: Vec<u8|u16> }` with the conversion to volts and seconds in one function, as OOS
   docs/scpi.md "Waveform transfer" states it.
 - After each set the error queue is read (`*OPC?` where the table says the command takes time), so a refused value
@@ -209,6 +210,7 @@ frame. One worker per connection; a second scope is a second session.
 
 | You want to | Change | And also |
 |---|---|---|
+| show one more measurement | a row in `crates/scpi/src/measures.rs` | nothing else |
 | read or set one more setting | a row in `crates/scpi/src/commands.rs` | its key in a panel's list (`app/src/panels.rs`), the header in OOS's docs/scpi.md at `OOS_REV` |
 | a new query that is not a setting | a method of `Scope` (`crates/scpi/src/scope.rs`) with an exchange test | a `Kind` in `session` if it is polled, an `Event` for its result |
 | a new side panel | its line in `PANELS` (`app/src/panels.rs`), a module of its own once it draws more than rows | its fetch kinds, `docs/user-guide.md` |
@@ -222,8 +224,8 @@ frame. One worker per connection; a second scope is a second session.
 Built and tested (against `oos-ui --serve` where marked in section 7): the TCP link and the framing, resource strings,
 the table with the first settings of channels, time base and trigger, identity, error queue, run control, the screen
 record in pages, the session worker with merging and the poll plan, and the window with connect bar, panels and the
-waveform.
+waveform, the measurement panel.
 
 Planned, in this order: USBTMC through nusb and discovery (mDNS and USB) once OOS has its USBTMC function (OOS
-#235); measurements and cursors; screenshots and saving records; UI tests with egui_kittest; the CI job `sim` and the
+#235); cursors; screenshots and saving records; UI tests with egui_kittest; the CI job `sim` and the
 release builds.
