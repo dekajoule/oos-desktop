@@ -1,0 +1,2 @@
+# Every text file is checked out with LF, also on Windows (AGENTS.md, Style; tools/text.py)
+* text=auto eol=lf
