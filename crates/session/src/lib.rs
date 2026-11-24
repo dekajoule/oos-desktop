@@ -10,7 +10,8 @@ mod worker;
 
 pub use oos_link::{Endpoint, Found};
 pub use oos_scpi::{
-    commands, measures, short, Identity, Kind, Measure, Preamble, Row, Value, Waveform, MEASURES, ROWS,
+    commands, measures, short, Acquisition, Identity, Kind, Measure, Preamble, Row, TriggerState, Value, Waveform,
+    MEASURES, ROWS,
 };
 pub use plan::Watch;
 
@@ -28,6 +29,12 @@ pub enum Action {
     Run,
     Stop,
     Single,
+    /// The scope sets channels, time base and trigger to the signals.
+    Autoscale,
+    /// Persistence and measurement statistics cleared.
+    Clear,
+    /// One record without waiting for the trigger.
+    Force,
     /// What the visible panels need read regularly.
     Watch(Watch),
     /// The scope's screen as PNG into `path` (a file the user chose).
@@ -51,6 +58,8 @@ pub enum Event {
         value: Value,
     },
     Waveform(Waveform),
+    /// The trigger's state, the sample rate and the memory depth.
+    Acquisition(Acquisition),
     /// A measurement of a channel; None while the scope has no value for it.
     Measured {
         key: &'static str,

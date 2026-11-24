@@ -89,12 +89,15 @@ pub fn run(
                         Err(e) => Err((None, e)),
                     }
                 }
-                Action::Run | Action::Stop | Action::Single => {
+                Action::Run | Action::Stop | Action::Single | Action::Autoscale | Action::Clear | Action::Force => {
                     plan.settings_now();
                     match a {
                         Action::Run => scope.run(),
                         Action::Stop => scope.stop(),
-                        _ => scope.single(),
+                        Action::Single => scope.single(),
+                        Action::Autoscale => scope.autoscale(),
+                        Action::Clear => scope.clear(),
+                        _ => scope.force(),
                     }
                     .map_err(|e| (None, e))
                 }
@@ -109,6 +112,9 @@ pub fn run(
         let r = match plan.next(Instant::now()) {
             None => continue,
             Some(Job::Settings) => read_settings(&mut scope, channels, &emit),
+            Some(Job::Acquisition) => scope.acquisition().map(|a| {
+                emit(Event::Acquisition(a));
+            }),
             Some(Job::Measures) => read_measures(&mut scope, &plan.watch.measures, &emit),
             Some(Job::Waveform(ch)) => scope.waveform(ch).map(|w| {
                 emit(Event::Waveform(w));
@@ -137,12 +143,15 @@ fn write(
 
 /// Every row, for each channel of the model.
 fn read_settings(scope: &mut Scope, channels: u8, emit: &impl Fn(Event) -> bool) -> Result<(), ScpiError> {
-    for row in ROWS {
-        let chs = if row.per_channel() { 1..=channels } else { 1..=1 };
-        for ch in chs {
-            let value = scope.get(row, ch)?;
-            emit(Event::Setting { key: row.key, ch, value });
-        }
+    let which: Vec<_> = ROWS
+        .iter()
+        .flat_map(|row| {
+            let chs = if row.per_channel() { 1..=channels } else { 1..=1 };
+            chs.map(move |ch| (row, ch))
+        })
+        .collect();
+    for ((row, ch), value) in which.iter().zip(scope.get_many(&which)?) {
+        emit(Event::Setting { key: row.key, ch: *ch, value });
     }
     Ok(())
 }
@@ -153,11 +162,9 @@ fn read_measures(
     which: &[(&'static str, u8)],
     emit: &impl Fn(Event) -> bool,
 ) -> Result<(), ScpiError> {
-    for &(key, ch) in which {
-        if let Some(m) = measures::measure(key) {
-            let value = scope.measure(m, ch)?;
-            emit(Event::Measured { key, ch, value });
-        }
+    let rows: Vec<_> = which.iter().filter_map(|&(key, ch)| measures::measure(key).map(|m| (m, ch))).collect();
+    for ((m, ch), value) in rows.iter().zip(scope.measure_many(&rows)?) {
+        emit(Event::Measured { key: m.key, ch: *ch, value });
     }
     Ok(())
 }

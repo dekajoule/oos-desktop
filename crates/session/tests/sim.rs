@@ -20,18 +20,21 @@ fn a_session_against_the_simulator() {
         other => panic!("{other:?}"),
     };
     assert_eq!(id.maker, "OOS");
-    h.send(Action::Watch(Watch { channels: vec![1], settings: true, measures: vec![("vpp", 1)] }));
-    // every row answers, for every channel of the model, and a record comes
+    let watch = Watch { channels: vec![1], settings: true, measures: vec![("vpp", 1)], acquisition: true };
+    h.send(Action::Watch(watch));
+    // every row answers, for every channel of the model, and a record and the acquisition's state come
     let mut seen = std::collections::HashSet::new();
     let mut wave = None;
     let mut vpp = None;
+    let mut acq = None;
     let end = Instant::now() + Duration::from_secs(20);
-    while Instant::now() < end && (wave.is_none() || vpp.is_none() || seen.len() < ROWS.len()) {
+    while Instant::now() < end && (wave.is_none() || vpp.is_none() || acq.is_none() || seen.len() < ROWS.len()) {
         match next("settings and a record") {
             Event::Setting { key, .. } => {
                 seen.insert(key);
             }
             Event::Waveform(w) => wave = Some(w),
+            Event::Acquisition(a) => acq = Some(a),
             Event::Measured { key: "vpp", ch: 1, value } => vpp = vpp.or(value),
             Event::Measured { .. } => {}
             Event::Problem { key, text } => panic!("{key:?}: {text}"),
@@ -43,6 +46,12 @@ fn a_session_against_the_simulator() {
     let w = wave.expect("a record of CH1");
     assert!(vpp.is_some_and(|v| v > 0.0), "no peak-peak value of CH1: {vpp:?}");
     assert!(w.codes.len() as u64 == w.preamble.points && !w.codes.is_empty(), "{:?}", w.preamble);
+    let acq = acq.expect("the acquisition's state");
+    assert!(acq.sample_rate.is_some_and(|r| r > 0.0), "{acq:?}");
+    // the run controls of the bar are taken
+    for a in [Action::Stop, Action::Force, Action::Clear, Action::Run, Action::Autoscale] {
+        h.send(a);
+    }
     // a screenshot and the record are written where the user chose
     let dir = std::env::temp_dir().join(format!("oos-desktop-sim-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");

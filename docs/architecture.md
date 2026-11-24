@@ -115,8 +115,13 @@ upwards, and `app` does not use `scpi` or `link` directly; it sees their types o
   list.
 - `measures.rs`: the measurements the program shows, one row each (key, the item of `:MEASure:ITEM?`, label, unit).
 - `Scope<L: Link>`: the typed queries that are more than a setting: `identity()` (`*IDN?`, the OOS version),
-  `waveform(source, mode)` (`:WAVeform:SOURce`, `:MODE`, `:FORMat`, `:PREamble?`, `:DATA?` in pages),
-  `screenshot()` (`:DISPlay:DATA? PNG`), `measure(row, channel)` (None for the scope's `9.9E37`), `errors()` (`:SYSTem:ERRor?` until empty).
+  `get_many(rows)` (the settings), `waveform(source, mode)` (`:WAVeform:SOURce`, `:MODE`, `:FORMat`, `:PREamble?`,
+  `:DATA?` in pages), `screenshot()` (`:DISPlay:DATA? PNG`), `measure_many(rows)` (None for the scope's `9.9E37`),
+  `acquisition()` (`:TRIGger:STATus?`, `:ACQuire:SRATe?`, `:ACQuire:MDEPth?`), `autoscale()`, `clear()`, `force()`,
+  `errors()` (`:SYSTem:ERRor?` until empty).
+- **Queries are chained:** up to twelve queries go in one message, separated by semicolons with absolute headers, and
+  their answers come back in one line (OOS docs/scpi.md, "Connection and syntax"). A poll of many settings waits for
+  a link's round trip, not for each answer; an answer with fewer parts than queries is an error of the whole chain.
 - `Waveform { preamble, samples: Vec<u8|u16> }` with the conversion to volts and seconds in one function, as OOS
   docs/scpi.md "Waveform transfer" states it.
 - After each set the error queue is read (`*OPC?` where the table says the command takes time), so a refused value
@@ -129,13 +134,14 @@ upwards, and `app` does not use `scpi` or `link` directly; it sees their types o
 
 - `Session::open(endpoint) -> (Handle, Receiver<Event>)` starts a worker thread that owns the link and the `Scope`.
 - `Action` (from the UI): `Set { key, channel, value }`, `Fetch(Kind)` (waveform, screenshot, measurements),
-  `Run`/`Stop`/`Single`, `Close`. `Event` (to the UI): `Connected(Identity)`, `Settings(Vec<(key, value)>)`,
+  `Run`/`Stop`/`Single`, `Autoscale`/`Clear`/`Force`, `Close`. `Event` (to the UI): `Connected(Identity)`, `Settings(Vec<(key, value)>)`,
   `Waveform(..)`, `Screenshot(..)`, `Refused { key, error }`, `Lost(reason)`.
 - **Order:** actions first, then the poll plan. Several sets of the same key waiting are merged to the newest (a knob
   turned fast sends one value, not twenty).
 - **The poll plan** (`plan.rs`): what is read how often, and only what a visible panel needs: the waveform of the shown
   channels as fast as the link delivers, with one fetch of a kind in flight at a time; the settings once a second and
-  after every set; the measurements of the open panel twice a second. A slow link lowers the rate, it does not pile up
+  after every set; the chosen measurements of the channels that are on twice a second; the state of the acquisition
+  (trigger state, sample rate, memory depth) four times a second. A slow link lowers the rate, it does not pile up
   requests.
 - After each event the worker asks the UI to draw again (a callback the app hands in; `session` does not know egui).
 - A lost link ends the worker with `Lost`; the app offers to connect again. No silent reconnect loop.
@@ -147,8 +153,12 @@ upwards, and `app` does not use `scpi` or `link` directly; it sees their types o
 - `PANELS` (`app/src/panels.rs`) is the registry of the side panels: id, title, the setting keys it shows, the fetch
   kinds it needs, its draw function. A panel draws from the `Model` and returns `Action`s; it never blocks and never
   talks to the session itself (ADR 0005).
-- `plot.rs`: the waveform view. The record is reduced to min/max per pixel column before drawing (pure, tested), grid
-  and units from the preamble, cursors in the view.
+- `plot.rs`: the waveform view. Each record is placed by its preamble and its channel's scale and offset as the
+  scope's screen places it, and reduced to min/max per pixel column before drawing (pure, tested); markers of ground,
+  trigger level and trigger time, the value under the pointer, and time and level cursors in divisions of the grid.
+- `strip.rs`: the cards below the waveform (channels, time base, acquisition, trigger: a click switches a channel, the
+  wheel turns its knob) and the chips of the chosen measurements. `widgets.rs`: the program's own controls, icons drawn
+  as shapes; `icon.rs`: the mark, drawn in code, also the window icon.
 - Settings of the program itself (recent scopes, window layout, open panels) are kept with eframe's storage; nothing
   of a scope's identity goes into logs or files the user did not ask for.
 - Colours and spacing come from `theme.rs`, one place, close to the look of OOS (neutral, white accent, round shapes).
@@ -225,12 +235,13 @@ frame. One worker per connection; a second scope is a second session.
 ## 10. State
 
 Built and tested (against `oos-ui --serve` where marked in section 7): the TCP link and the framing, resource strings,
-the table with the first settings of channels, time base and trigger, identity, error queue, run control, the screen
-record in pages, the session worker with merging and the poll plan, and the window with connect bar, panels and the
-waveform, the measurement panel, the screenshot and the records saved as files, finding scopes on the network.
+the table with the settings of channels, time base, trigger and acquisition, identity, error queue, run control with
+autoscale, clear and force, the acquisition's state, chained queries, the screen record in pages, the session worker
+with merging and the poll plan, and the window with top bar, panels, the scaled waveform with markers and cursors, the
+strip of cards, the measurements below the waveform, the screenshot and the records saved as files, finding scopes on
+the network.
 
 USBTMC is built and its protocol tested on the host; it has not run against a scope yet (OOS's USBTMC function is
 not merged).
 
-Planned: cursors; UI tests with egui_kittest; the CI job `sim` and the
-release builds.
+Planned: UI tests with egui_kittest; the CI job `sim` and the release builds.

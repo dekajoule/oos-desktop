@@ -67,6 +67,19 @@ pub static ROWS: &[Row] = &[
         label: "Coupling",
     },
     Row {
+        key: "chan.probe",
+        header: ":CHANnel{n}:PROBe",
+        kind: Kind::Float { unit: "×", min: 1e-4, max: 5e4 },
+        label: "Probe",
+    },
+    Row {
+        key: "chan.bandwidth",
+        header: ":CHANnel{n}:BWLimit",
+        kind: Kind::Enum(&["OFF", "20M", "AUTO"]),
+        label: "BW limit",
+    },
+    Row { key: "chan.invert", header: ":CHANnel{n}:INVert", kind: Kind::Bool, label: "Invert" },
+    Row {
         key: "time.scale",
         header: ":TIMebase:SCALe",
         kind: Kind::Float { unit: "s/div", min: 1e-9, max: 1000.0 },
@@ -78,6 +91,13 @@ pub static ROWS: &[Row] = &[
         kind: Kind::Float { unit: "s", min: -1000.0, max: 1000.0 },
         label: "Delay",
     },
+    Row {
+        key: "time.expand",
+        header: ":TIMebase:HREFerence:MODE",
+        kind: Kind::Enum(&["CENTer", "LB", "RB", "TRIGger"]),
+        label: "Expand around",
+    },
+    Row { key: "time.roll", header: ":TIMebase:ROLL", kind: Kind::Bool, label: "Auto roll" },
     Row {
         key: "trig.sweep",
         header: ":TRIGger:SWEep",
@@ -96,6 +116,31 @@ pub static ROWS: &[Row] = &[
         header: ":TRIGger:EDGE:SLOPe",
         kind: Kind::Enum(&["POSitive", "NEGative", "RFALl"]),
         label: "Slope",
+    },
+    Row {
+        key: "trig.coupling",
+        header: ":TRIGger:COUPling",
+        kind: Kind::Enum(&["DC", "AC", "LFReject", "HFReject"]),
+        label: "Coupling",
+    },
+    Row {
+        key: "trig.holdoff",
+        header: ":TRIGger:HOLDoff",
+        kind: Kind::Float { unit: "s", min: 0.0, max: 10.0 },
+        label: "Holdoff",
+    },
+    Row { key: "trig.noise", header: ":TRIGger:NREJect", kind: Kind::Bool, label: "Noise reject" },
+    Row {
+        key: "acq.type",
+        header: ":ACQuire:TYPE",
+        kind: Kind::Enum(&["NORMal", "PEAK", "AVERages", "HRESolution"]),
+        label: "Mode",
+    },
+    Row {
+        key: "acq.averages",
+        header: ":ACQuire:AVERages",
+        kind: Kind::Enum(&["2", "4", "8", "16", "32", "64", "128", "256", "512", "1024"]),
+        label: "Averages",
     },
 ];
 

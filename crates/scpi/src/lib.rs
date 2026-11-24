@@ -11,6 +11,6 @@ mod waveform;
 
 pub use commands::{Kind, Row, ROWS};
 pub use measures::{Measure, MEASURES};
-pub use scope::{Identity, Scope, ScpiError};
+pub use scope::{Acquisition, Identity, Scope, ScpiError, TriggerState};
 pub use value::{short, Value};
 pub use waveform::{Preamble, Waveform};
