@@ -37,8 +37,8 @@ flowchart LR
     app -. "finds _scpi-raw._tcp" .-> mdns
 ```
 
-Sources: `crates/link/src/tcp.rs`, `crates/link/src/endpoint.rs`, `crates/link/src/discover.rs`; USBTMC is planned
-(section 10).
+Sources: `crates/link/src/tcp.rs`, `crates/link/src/usbtmc.rs`, `crates/link/src/endpoint.rs`,
+`crates/link/src/discover.rs`.
 
 Both ways reach the same interpreter in the scope (OOS ADR 0022), so the program speaks one language over both and the
 transport is a detail of one crate.
@@ -95,13 +95,14 @@ upwards, and `app` does not use `scpi` or `link` directly; it sees their types o
 - `Tcp`: the SCPI socket (port 5555). Commands end with `\n`; an answer is read up to `\n`, or as a block when it
   starts with `#`.
 - `Usbtmc`: USBTMC with the USB488 subclass through [nusb](https://crates.io/crates/nusb) (no libusb). Bulk-OUT
-  `DEV_DEP_MSG_OUT`, `REQUEST_DEV_DEP_MSG_IN` and the Bulk-IN answer, with tags; `INITIATE_CLEAR` and the aborts for
-  `clear()`. The scope's function announces WinUSB to Windows, so no driver needs installing (OOS, its ADR for
+  `DEV_DEP_MSG_OUT` with the whole command and EOM, `REQUEST_DEV_DEP_MSG_IN` for up to 1 MiB and the Bulk-IN answer
+  read to its short packet, again until EOM; the answer's bytes go through the same framer as TCP. `INITIATE_CLEAR`
+  and `CHECK_CLEAR_STATUS` for `clear()`. The scope's function announces WinUSB to Windows, so no driver needs installing (OOS, its ADR for
   USBTMC).
 - `Script`: a link that plays a written exchange (`> *IDN?` / `< OOS,...`), for the tests of every layer above.
 - `discover()`: the scopes in reach: one mDNS question for `_scpi-raw._tcp` (OOS docs/network.md 4.1) on every IPv4
-  interface, asked from an ordinary port so that the scopes answer it directly (legacy unicast); USB devices of class
-  0xFE/0x03 with the vendor and product of OOS once USBTMC is there. It returns `Endpoint`s, written and read as VISA-like resource strings
+  interface, asked from an ordinary port so that the scopes answer it directly (legacy unicast); and the USB devices
+  with a USBTMC interface (class 0xFE/0x03). It returns `Endpoint`s, written and read as VISA-like resource strings
   (`TCPIP::dho924s-123456.local::5555::SOCKET`, `USB::0x1209::0x....::<serial>::INSTR`).
 - It knows nothing of SCPI beyond the framing. It does no retries: a failed transfer is an error for the caller.
 
@@ -228,6 +229,8 @@ the table with the first settings of channels, time base and trigger, identity, 
 record in pages, the session worker with merging and the poll plan, and the window with connect bar, panels and the
 waveform, the measurement panel, the screenshot and the records saved as files, finding scopes on the network.
 
-Planned, in this order: USBTMC through nusb and its discovery once OOS has its USBTMC function (OOS
-#235); cursors; UI tests with egui_kittest; the CI job `sim` and the
+USBTMC is built and its protocol tested on the host; it has not run against a scope yet (OOS's USBTMC function is
+not merged).
+
+Planned: cursors; UI tests with egui_kittest; the CI job `sim` and the
 release builds.
