@@ -35,7 +35,7 @@ mod tests {
             set("chan.scale", 2, 0.2),
             set("chan.scale", 1, 0.3),
             Action::Watch(Watch::default()),
-            Action::Watch(Watch { channels: vec![1], settings: true }),
+            Action::Watch(Watch { channels: vec![1], settings: true, measures: vec![] }),
         ]);
         assert_eq!(
             got,
@@ -43,7 +43,7 @@ mod tests {
                 Action::Stop,
                 set("chan.scale", 2, 0.2),
                 set("chan.scale", 1, 0.3),
-                Action::Watch(Watch { channels: vec![1], settings: true }),
+                Action::Watch(Watch { channels: vec![1], settings: true, measures: vec![] }),
             ]
         );
     }

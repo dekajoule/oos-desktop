@@ -5,7 +5,7 @@
 use crate::merge::merge;
 use crate::plan::{Job, Plan};
 use crate::{Action, Event};
-use oos_scpi::{commands, Scope, ScpiError, ROWS};
+use oos_scpi::{commands, measures, Scope, ScpiError, ROWS};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
@@ -93,6 +93,7 @@ pub fn run(
         let r = match plan.next(Instant::now()) {
             None => continue,
             Some(Job::Settings) => read_settings(&mut scope, channels, &emit),
+            Some(Job::Measures) => read_measures(&mut scope, &plan.watch.measures, &emit),
             Some(Job::Waveform(ch)) => scope.waveform(ch).map(|w| {
                 emit(Event::Waveform(w));
             }),
@@ -112,6 +113,21 @@ fn read_settings(scope: &mut Scope, channels: u8, emit: &impl Fn(Event) -> bool)
         for ch in chs {
             let value = scope.get(row, ch)?;
             emit(Event::Setting { key: row.key, ch, value });
+        }
+    }
+    Ok(())
+}
+
+/// The watched measurements; a key without a row is skipped (the app names only rows of `MEASURES`).
+fn read_measures(
+    scope: &mut Scope,
+    which: &[(&'static str, u8)],
+    emit: &impl Fn(Event) -> bool,
+) -> Result<(), ScpiError> {
+    for &(key, ch) in which {
+        if let Some(m) = measures::measure(key) {
+            let value = scope.measure(m, ch)?;
+            emit(Event::Measured { key, ch, value });
         }
     }
     Ok(())

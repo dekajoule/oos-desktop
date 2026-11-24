@@ -2,6 +2,7 @@
 //! The typed side of the scope: identity, the settings of the table, run control, records and the error queue.
 
 use crate::commands::Row;
+use crate::measures::{Measure, NO_VALUE};
 use crate::{Preamble, Value, Waveform};
 use oos_link::{Error as LinkError, Link, Message};
 use std::time::{Duration, Instant};
@@ -129,6 +130,14 @@ impl Scope {
         Ok(Waveform { source: ch, preamble: p, codes })
     }
 
+    /// A measurement of channel `ch`; None while the scope has no value for it (`9.9E37`).
+    pub fn measure(&mut self, m: &Measure, ch: u8) -> Result<Option<f64>, ScpiError> {
+        let q = format!(":MEASure:ITEM? {},CHAN{ch}", m.item);
+        let a = self.query(&q)?;
+        let x: f64 = a.trim().parse().map_err(|_| ScpiError::Unexpected { asked: q, got: a.clone() })?;
+        Ok((x.is_finite() && x.abs() < NO_VALUE * 0.5).then_some(x))
+    }
+
     /// The error queue until it is empty (`0,"No error"`), at most [`MAX_ERRORS`] entries.
     pub fn errors(&mut self) -> Result<Vec<(i32, String)>, ScpiError> {
         let mut out = Vec::new();
@@ -222,6 +231,18 @@ mod tests {
         assert_eq!(s.get(r, 1).expect("get"), Value::Word("NORM"));
         let mut s = scope(Script::new("> :TRIGger:SWEep?\n< BANANA"));
         assert!(matches!(s.get(r, 1), Err(ScpiError::Unexpected { .. })));
+    }
+
+    #[test]
+    fn a_measurement_and_one_the_scope_has_not_got() {
+        let freq = crate::measures::measure("freq").expect("freq");
+        let mut s = scope(Script::new(
+            "> :MEASure:ITEM? FREQUENCY,CHAN2\n< 1.000000E+03\n> :MEASure:ITEM? FREQUENCY,CHAN2\n< 9.9E37\n\
+             > :MEASure:ITEM? FREQUENCY,CHAN2\n< what",
+        ));
+        assert_eq!(s.measure(freq, 2).expect("value"), Some(1000.0));
+        assert_eq!(s.measure(freq, 2).expect("none"), None);
+        assert!(matches!(s.measure(freq, 2), Err(ScpiError::Unexpected { .. })));
     }
 
     #[test]

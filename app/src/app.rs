@@ -2,10 +2,10 @@
 //! The window: the connect bar and run control at the top, the panels on the right, the waveform in the middle.
 
 use crate::model::Model;
-use crate::panels::{self, PANELS};
+use crate::panels::{self, MEASURES_FIRST, PANELS};
 use crate::{plot, theme};
 use eframe::egui::{self, RichText};
-use oos_session::{Action, Endpoint, Event, Handle, Watch};
+use oos_session::{measures, Action, Endpoint, Event, Handle, Watch};
 use std::sync::mpsc::Receiver;
 
 pub struct App {
@@ -15,13 +15,20 @@ pub struct App {
     /// The panel shown on the right (an id of `PANELS`).
     panel: &'static str,
     watched: Option<Watch>,
+    /// The measurements chosen in the measurement panel (keys of `MEASURES`).
+    measures: Vec<&'static str>,
 }
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> App {
         theme::apply(&cc.egui_ctx);
-        let address = cc.storage.and_then(|s| s.get_string("address")).unwrap_or_default();
-        App { address, session: None, model: Model::default(), panel: PANELS[0].id, watched: None }
+        let get = |k: &str| cc.storage.and_then(|s| s.get_string(k));
+        let address = get("address").unwrap_or_default();
+        let measures = match get("measures") {
+            Some(s) => s.split(',').filter_map(|k| measures::measure(k).map(|m| m.key)).collect(),
+            None => MEASURES_FIRST.to_vec(),
+        };
+        App { address, session: None, model: Model::default(), panel: PANELS[0].id, watched: None, measures }
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
@@ -46,6 +53,7 @@ impl App {
 impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("address", self.address.clone());
+        storage.set_string("measures", self.measures.join(","));
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -59,7 +67,12 @@ impl eframe::App for App {
             self.session = None;
         }
         // what the visible parts need: the shown channels' records, the settings while a panel is open
-        let want = Watch { channels: (1..=self.model.channels()).collect(), settings: true };
+        let panel = PANELS.iter().find(|p| p.id == self.panel).unwrap_or(&PANELS[0]);
+        let want = Watch {
+            channels: (1..=self.model.channels()).collect(),
+            settings: true,
+            measures: panels::measures_watched(panel, &self.model, &self.measures),
+        };
         if self.session.is_some() && self.model.identity.is_some() && self.watched.as_ref() != Some(&want) {
             self.send(Action::Watch(want.clone()));
             self.watched = Some(want);
@@ -101,7 +114,8 @@ impl eframe::App for App {
             });
             ui.separator();
             if let Some(p) = PANELS.iter().find(|p| p.id == self.panel) {
-                egui::ScrollArea::vertical().show(ui, |ui| panels::draw(ui, p, &mut self.model, &mut out));
+                egui::ScrollArea::vertical()
+                    .show(ui, |ui| panels::draw(ui, p, &mut self.model, &mut self.measures, &mut out));
             }
         });
         egui::CentralPanel::default().show(ui, |ui| {

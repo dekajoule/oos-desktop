@@ -8,7 +8,9 @@ mod plan;
 mod worker;
 
 pub use oos_link::Endpoint;
-pub use oos_scpi::{commands, short, Identity, Kind, Preamble, Row, Value, Waveform, ROWS};
+pub use oos_scpi::{
+    commands, measures, short, Identity, Kind, Measure, Preamble, Row, Value, Waveform, MEASURES, ROWS,
+};
 pub use plan::Watch;
 
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -41,6 +43,12 @@ pub enum Event {
         value: Value,
     },
     Waveform(Waveform),
+    /// A measurement of a channel; None while the scope has no value for it.
+    Measured {
+        key: &'static str,
+        ch: u8,
+        value: Option<f64>,
+    },
     /// The scope refused an action, or answered something that does not fit; the session goes on.
     Problem {
         key: Option<&'static str>,

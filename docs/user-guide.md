@@ -14,5 +14,7 @@ shown on the scope under System > Network > Remote services), its IP address, or
 - The panels on the right (**Channels**, **Time base**, **Trigger**) show the scope's settings and change them. A dot
   beside a value means it was sent and the scope has not answered it yet; a value the scope refuses goes back to the
   scope's value, and the reason is shown at the bottom.
+- **Measure** shows the measurements the scope makes of each channel that is on, twice a second while the panel is
+  open. **Choose** below picks which; a dash means the scope has no value on this record (too few periods, say).
 
 The program remembers the last address.

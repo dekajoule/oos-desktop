@@ -1,48 +1,119 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-//! The side panels, one line each in [`PANELS`]: the setting keys a panel shows (rows of the table in oos-scpi) and
-//! whether it repeats them per channel. A panel draws from the model and returns actions; it never talks to the scope.
+//! The side panels, one line each in [`PANELS`]: what a panel shows ([`Body`]: rows of the table of settings in
+//! oos-scpi, per channel or once, or the measurements). A panel draws from the model and returns actions; it never
+//! talks to the scope.
 
 use crate::model::Model;
 use crate::theme;
 use eframe::egui::{self, RichText};
-use oos_session::{commands, short, Action, Kind, Value};
+use oos_session::{commands, measures, short, Action, Kind, Value, MEASURES};
 
 pub struct PanelInfo {
     /// Stable: stored with the window layout.
     pub id: &'static str,
     pub title: &'static str,
-    /// Keys of rows of the table, in the order shown.
-    pub keys: &'static [&'static str],
-    /// One group per channel of the model.
-    pub per_channel: bool,
+    pub body: Body,
 }
+
+pub enum Body {
+    /// Rows of the table of settings, in the order shown; `per_channel`: one group per channel of the model.
+    Settings { keys: &'static [&'static str], per_channel: bool },
+    /// The chosen measurements of the channels that are on.
+    Measures,
+}
+
+/// Measurements shown before the user chose any.
+pub const MEASURES_FIRST: &[&str] = &["vpp", "freq"];
 
 pub static PANELS: &[PanelInfo] = &[
     PanelInfo {
         id: "channels",
         title: "Channels",
-        keys: &["chan.on", "chan.scale", "chan.offset", "chan.coupling"],
-        per_channel: true,
+        body: Body::Settings { keys: &["chan.on", "chan.scale", "chan.offset", "chan.coupling"], per_channel: true },
     },
-    PanelInfo { id: "timebase", title: "Time base", keys: &["time.scale", "time.offset"], per_channel: false },
+    PanelInfo {
+        id: "timebase",
+        title: "Time base",
+        body: Body::Settings { keys: &["time.scale", "time.offset"], per_channel: false },
+    },
     PanelInfo {
         id: "trigger",
         title: "Trigger",
-        keys: &["trig.sweep", "trig.source", "trig.level", "trig.slope"],
-        per_channel: false,
+        body: Body::Settings { keys: &["trig.sweep", "trig.source", "trig.level", "trig.slope"], per_channel: false },
     },
+    PanelInfo { id: "measure", title: "Measure", body: Body::Measures },
 ];
 
-/// Draws panel `p`; what the user changes is appended to `out` and marked as sent in `m`.
-pub fn draw(ui: &mut egui::Ui, p: &PanelInfo, m: &mut Model, out: &mut Vec<Action>) {
+/// What panel `p` wants read regularly: the measurements of the channels that are on, while it is shown.
+pub fn measures_watched(p: &PanelInfo, m: &Model, shown: &[&'static str]) -> Vec<(&'static str, u8)> {
+    match p.body {
+        Body::Measures => m.channels_on().into_iter().flat_map(|c| shown.iter().map(move |&k| (k, c))).collect(),
+        Body::Settings { .. } => Vec::new(),
+    }
+}
+
+/// Draws panel `p`; what the user changes is appended to `out` and marked as sent in `m`. `shown`: the measurements
+/// chosen, which the measurement panel changes.
+pub fn draw(ui: &mut egui::Ui, p: &PanelInfo, m: &mut Model, shown: &mut Vec<&'static str>, out: &mut Vec<Action>) {
     ui.heading(p.title);
-    let chs: Vec<u8> = if p.per_channel { (1..=m.channels()).collect() } else { vec![1] };
+    match p.body {
+        Body::Settings { keys, per_channel } => settings(ui, p.id, keys, per_channel, m, out),
+        Body::Measures => measurements(ui, m, shown),
+    }
+}
+
+/// The chosen measurements, one column per channel that is on, and the choice below.
+fn measurements(ui: &mut egui::Ui, m: &Model, shown: &mut Vec<&'static str>) {
+    let chs = m.channels_on();
+    egui::Grid::new("measures").num_columns(chs.len() + 1).striped(true).show(ui, |ui| {
+        ui.label("");
+        for &c in &chs {
+            ui.label(RichText::new(format!("CH{c}")).color(theme::channel(c)).strong());
+        }
+        ui.end_row();
+        for &k in shown.iter() {
+            let Some(row) = measures::measure(k) else { continue };
+            ui.label(row.label);
+            for &c in &chs {
+                match m.measured(k, c) {
+                    Some(Some(x)) => ui.label(eng(x, row.unit)),
+                    Some(None) => ui.label("—").on_hover_text("the scope has no value for it on this record"),
+                    None => ui.label("…"),
+                };
+            }
+            ui.end_row();
+        }
+    });
+    ui.add_space(8.0);
+    ui.collapsing("Choose", |ui| {
+        for row in MEASURES {
+            let mut on = shown.contains(&row.key);
+            if ui.checkbox(&mut on, row.label).changed() {
+                if on {
+                    shown.push(row.key);
+                } else {
+                    shown.retain(|k| *k != row.key);
+                }
+            }
+        }
+    });
+}
+
+fn settings(
+    ui: &mut egui::Ui,
+    id: &'static str,
+    keys: &'static [&'static str],
+    per_channel: bool,
+    m: &mut Model,
+    out: &mut Vec<Action>,
+) {
+    let chs: Vec<u8> = if per_channel { (1..=m.channels()).collect() } else { vec![1] };
     for ch in chs {
-        if p.per_channel {
+        if per_channel {
             ui.label(RichText::new(format!("CH{ch}")).color(theme::channel(ch)).strong());
         }
-        egui::Grid::new((p.id, ch)).num_columns(2).show(ui, |ui| {
-            for key in p.keys {
+        egui::Grid::new((id, ch)).num_columns(2).show(ui, |ui| {
+            for key in keys {
                 let Some(row) = commands::row(key) else { continue };
                 ui.label(row.label);
                 let now = m.value(row.key, ch);
@@ -131,12 +202,30 @@ mod tests {
         let mut ids = std::collections::HashSet::new();
         for p in PANELS {
             assert!(ids.insert(p.id), "{}: id used twice", p.id);
-            assert!(!p.keys.is_empty(), "{}: no keys", p.id);
-            for k in p.keys {
-                let row = commands::row(k).unwrap_or_else(|| panic!("{}: no row {k} in the table", p.id));
-                assert_eq!(row.per_channel(), p.per_channel, "{}: {k} and the panel differ on channels", p.id);
+            if let Body::Settings { keys, per_channel } = p.body {
+                assert!(!keys.is_empty(), "{}: no keys", p.id);
+                for k in keys {
+                    let row = commands::row(k).unwrap_or_else(|| panic!("{}: no row {k} in the table", p.id));
+                    assert_eq!(row.per_channel(), per_channel, "{}: {k} and the panel differ on channels", p.id);
+                }
             }
         }
+        for k in MEASURES_FIRST {
+            assert!(measures::measure(k).is_some(), "MEASURES_FIRST: no measurement {k}");
+        }
+    }
+
+    #[test]
+    fn the_measure_panel_watches_its_measurements_of_the_channels_that_are_on() {
+        use oos_session::Event;
+        let mut m = Model::default();
+        for (c, on) in [(1, true), (2, false), (3, true), (4, false)] {
+            m.apply(Event::Setting { key: "chan.on", ch: c, value: Value::Bool(on) });
+        }
+        let measure = PANELS.iter().find(|p| p.id == "measure").expect("measure panel");
+        let got = measures_watched(measure, &m, &["vpp", "freq"]);
+        assert_eq!(got, vec![("vpp", 1), ("freq", 1), ("vpp", 3), ("freq", 3)]);
+        assert!(measures_watched(&PANELS[0], &m, &["vpp"]).is_empty());
     }
 
     #[test]

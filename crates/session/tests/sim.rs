@@ -20,17 +20,20 @@ fn a_session_against_the_simulator() {
         other => panic!("{other:?}"),
     };
     assert_eq!(id.maker, "OOS");
-    h.send(Action::Watch(Watch { channels: vec![1], settings: true }));
+    h.send(Action::Watch(Watch { channels: vec![1], settings: true, measures: vec![("vpp", 1)] }));
     // every row answers, for every channel of the model, and a record comes
     let mut seen = std::collections::HashSet::new();
     let mut wave = None;
+    let mut vpp = None;
     let end = Instant::now() + Duration::from_secs(20);
-    while Instant::now() < end && (wave.is_none() || seen.len() < ROWS.len()) {
+    while Instant::now() < end && (wave.is_none() || vpp.is_none() || seen.len() < ROWS.len()) {
         match next("settings and a record") {
             Event::Setting { key, .. } => {
                 seen.insert(key);
             }
             Event::Waveform(w) => wave = Some(w),
+            Event::Measured { key: "vpp", ch: 1, value } => vpp = vpp.or(value),
+            Event::Measured { .. } => {}
             Event::Problem { key, text } => panic!("{key:?}: {text}"),
             other => panic!("{other:?}"),
         }
@@ -38,6 +41,7 @@ fn a_session_against_the_simulator() {
     let missing: Vec<_> = ROWS.iter().map(|r| r.key).filter(|k| !seen.contains(k)).collect();
     assert!(missing.is_empty(), "rows without an answer: {missing:?}");
     let w = wave.expect("a record of CH1");
+    assert!(vpp.is_some_and(|v| v > 0.0), "no peak-peak value of CH1: {vpp:?}");
     assert!(w.codes.len() as u64 == w.preamble.points && !w.codes.is_empty(), "{:?}", w.preamble);
     // a set comes back as the scope's answer
     h.send(Action::Set { key: "chan.scale", ch: 1, value: Value::Float(0.5) });

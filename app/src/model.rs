@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //! What the window knows of the scope: the last answer of each setting, the values sent and not yet confirmed, the
-//! last record of each channel, the identity and the last problem. Changed only by events and by what the UI sends.
+//! last record of each channel, the last measurements, the identity and the last problem. Changed only by events and
+//! by what the UI sends; `measures_shown` is the window's own choice of measurements, kept across connections.
 
 use oos_session::{Event, Identity, Value, Waveform};
 use std::collections::{BTreeMap, HashMap};
@@ -11,6 +12,7 @@ pub struct Model {
     settings: HashMap<(&'static str, u8), Value>,
     pending: HashMap<(&'static str, u8), Value>,
     pub waves: BTreeMap<u8, Waveform>,
+    measured: HashMap<(&'static str, u8), Option<f64>>,
     pub problem: Option<String>,
     pub lost: Option<String>,
 }
@@ -29,6 +31,9 @@ impl Model {
             }
             Event::Waveform(w) => {
                 self.waves.insert(w.source, w);
+            }
+            Event::Measured { key, ch, value } => {
+                self.measured.insert((key, ch), value);
             }
             Event::Problem { key, text } => {
                 if let Some(k) = key {
@@ -50,6 +55,16 @@ impl Model {
     /// What a control shows: the value being sent, else the scope's, and whether it is still pending.
     pub fn value(&self, key: &'static str, ch: u8) -> Option<(&Value, bool)> {
         self.pending.get(&(key, ch)).map(|v| (v, true)).or_else(|| self.settings.get(&(key, ch)).map(|v| (v, false)))
+    }
+
+    /// The last value of a measurement: None before it was read, Some(None) while the scope has no value.
+    pub fn measured(&self, key: &'static str, ch: u8) -> Option<Option<f64>> {
+        self.measured.get(&(key, ch)).copied()
+    }
+
+    /// The channels switched on, as the scope last answered.
+    pub fn channels_on(&self) -> Vec<u8> {
+        (1..=self.channels()).filter(|&c| matches!(self.value("chan.on", c), Some((Value::Bool(true), _)))).collect()
     }
 
     pub fn channels(&self) -> u8 {
