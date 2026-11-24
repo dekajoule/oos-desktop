@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Builds the program for Windows, macOS (one universal binary for Apple silicon and Intel) and Linux. A tag v* makes a
-# GitHub release with the three archives and their SHA-256 sums; started by hand it only keeps them as artifacts of
-# the run, to try the build.
+# GitHub release with the three archives and their SHA-256 sums; started by hand, or by a pull request that changes
+# this file, it only keeps them as artifacts of the run, to try the build.
 name: release
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  pull_request:
+    paths: [.github/workflows/release.yml]
 permissions:
   contents: read
 jobs:
