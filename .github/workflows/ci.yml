@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# What tools/check.sh runs, on the three systems the program is for, and the contract test against oos-ui --serve of
+# the OOS commit in OOS_REV (docs/architecture.md 6).
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: OOS at OOS_REV, for the layer scpi
+        shell: bash
+        run: git clone -q https://github.com/dekajoule/oos.git ../oos && git -C ../oos checkout -q "$(cat OOS_REV)"
+      - name: tools/check.sh
+        shell: bash
+        env:
+          OOS_DIR: ../oos
+          PYTHON: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+        run: tools/check.sh
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: OOS at OOS_REV
+        run: git clone -q https://github.com/dekajoule/oos.git ../oos && git -C ../oos checkout -q "$(cat OOS_REV)"
+      - name: the session against oos-ui --serve
+        env:
+          OOS_DIR: ../oos
+        run: tools/sim.sh cargo test -q -p oos-session --test sim

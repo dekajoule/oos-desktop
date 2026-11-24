@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+[package]
+name = "oos-link"
+description = "Bytes to and from one OOS scope: framing, TCP, USBTMC, a scripted link for tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository = "https://github.com/dekajoule/oos-desktop"
+rust-version.workspace = true
+
+[lints]
+workspace = true

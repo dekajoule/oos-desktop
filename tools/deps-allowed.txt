@@ -1,0 +1,4 @@
+# Dependencies of the workspace crates from crates.io, one per line with its reason (AGENTS.md, ADR 0006). The
+# licence must be compatible with GPL-2.0-or-later. tools/deps.py fails on a dependency missing here, and on a line
+# here that no crate uses any more.
+eframe        the window, input and drawing on Windows, macOS and Linux (egui), with storage of the program's settings

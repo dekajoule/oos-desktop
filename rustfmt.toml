@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Layout of all Rust code in the tree, for every crate (AGENTS.md, Build and check). Stable options only.
+edition = "2021"
+max_width = 120
+use_small_heuristics = "Max"

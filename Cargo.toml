@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+[workspace]
+resolver = "2"
+members = ["crates/link", "crates/scpi", "crates/session", "app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+rust-version = "1.82"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"

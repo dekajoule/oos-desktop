@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+[package]
+name = "oos-session"
+description = "One connection to an OOS scope, off the UI thread: actions in, events out, the poll plan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository = "https://github.com/dekajoule/oos-desktop"
+rust-version.workspace = true
+
+[dependencies]
+oos-link = { path = "../link" }
+oos-scpi = { path = "../scpi" }
+
+[lints]
+workspace = true
