@@ -8,7 +8,7 @@ mod merge;
 mod plan;
 mod worker;
 
-pub use oos_link::Endpoint;
+pub use oos_link::{Endpoint, Found};
 pub use oos_scpi::{
     commands, measures, short, Identity, Kind, Measure, Preamble, Row, Value, Waveform, MEASURES, ROWS,
 };
@@ -90,6 +90,20 @@ impl Drop for Handle {
 /// repaint request; this crate does not know egui).
 pub fn open(ep: Endpoint, wake: impl Fn() + Send + 'static) -> (Handle, Receiver<Event>) {
     start(move || oos_link::open(&ep, std::time::Instant::now() + worker::CONNECT_WAIT), wake)
+}
+
+/// Looks for scopes on the network in a thread of its own (an mDNS question, answers collected for about two
+/// seconds); the list comes through the receiver, then `wake` is called.
+pub fn find(wake: impl Fn() + Send + 'static) -> Receiver<Result<Vec<Found>, String>> {
+    let (tx, rx) = channel();
+    let spawned = std::thread::Builder::new().name("oos-find".into()).spawn(move || {
+        let _ = tx.send(oos_link::discover(std::time::Duration::from_secs(2)).map_err(|e| e.to_string()));
+        wake();
+    });
+    if let Err(e) = spawned {
+        eprintln!("oos-session: no thread to find scopes: {e}");
+    }
+    rx
 }
 
 /// A session on a link made by `connect` in the worker: for tests with a scripted link.

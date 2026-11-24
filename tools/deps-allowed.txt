@@ -3,3 +3,5 @@
 # here that no crate uses any more.
 eframe        the window, input and drawing on Windows, macOS and Linux (egui), with storage of the program's settings
 rfd           the system's own save dialog for screenshots and records (Windows, macOS, xdg portal on Linux); MIT
+socket2       the mDNS question sent on each interface (IP_MULTICAST_IF), which std cannot set; MIT or Apache-2.0
+if-addrs      the computer's IPv4 interfaces to ask on, without unsafe code of our own; MIT or BSD-3-Clause
