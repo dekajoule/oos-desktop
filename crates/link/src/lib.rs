@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //! Bytes to and from one scope (docs/architecture.md 3.1). A [`Link`] sends a command and returns each answer as one
 //! complete [`Message`]: a line, or an IEEE 488.2 definite-length block. It knows nothing of SCPI beyond that framing,
-//! and it does not retry.
+//! and it does not retry. Two transports: the SCPI socket ([`Tcp`]) and USBTMC ([`Usbtmc`]).
 
 mod discover;
 mod endpoint;
 mod framing;
 mod script;
 mod tcp;
+mod usbtmc;
 
 pub use discover::{discover, Found};
 pub use endpoint::{Endpoint, SCPI_PORT};
 pub use framing::{Framer, MAX_BLOCK, MAX_LINE};
 pub use script::Script;
 pub use tcp::Tcp;
+pub use usbtmc::Usbtmc;
 
 use std::time::Instant;
 
@@ -84,6 +86,6 @@ pub trait Link: Send {
 pub fn open(ep: &Endpoint, deadline: Instant) -> Result<Box<dyn Link>, Error> {
     match ep {
         Endpoint::Tcp { .. } => Ok(Box::new(Tcp::connect(ep.clone(), deadline)?)),
-        Endpoint::Usb { .. } => Err(Error::NotSupported("USBTMC (the scope's USB function comes with OOS #235)")),
+        Endpoint::Usb { .. } => Ok(Box::new(Usbtmc::open(ep.clone())?)),
     }
 }

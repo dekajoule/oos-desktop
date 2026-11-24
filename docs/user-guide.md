@@ -2,8 +2,10 @@
 
 ## Connecting
 
-**Find** asks the network for scopes running OOS (about two seconds); **Found** then lists them, and a click connects.
-The scope needs SCPI and mDNS on under System > Network > Remote services.
+**Find** asks the network for scopes running OOS (about two seconds) and looks at this computer's USB; **Found** then
+lists them, and a click connects. On the network the scope needs SCPI and mDNS on under System > Network > Remote
+services; over a USB cable to its rear port it needs **USB instrument** on there. Windows and macOS need no driver;
+Linux needs read and write access to the device (a udev rule, see OOS's docs/usb-device.md).
 
 Or type the scope's address into the field at the top and press Enter or **Connect**: its name (`dho924s-123456.local`,
 shown on the scope under System > Network > Remote services), its IP address, or a VISA-like resource string

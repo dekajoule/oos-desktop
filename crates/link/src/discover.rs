@@ -61,6 +61,8 @@ pub fn discover(wait: Duration) -> std::io::Result<Vec<Found>> {
             Err(e) => return Err(e),
         }
     }
+    // and the scopes on this computer's USB
+    found.extend(crate::usbtmc::list());
     found.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(found)
 }

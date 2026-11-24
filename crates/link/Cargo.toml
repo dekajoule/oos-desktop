@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 socket2 = { version = "0.6", features = ["all"] }
 if-addrs = "0.15"
+nusb = "0.2"
 
 [lints]
 workspace = true
